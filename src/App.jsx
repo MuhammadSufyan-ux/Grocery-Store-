@@ -12,7 +12,12 @@ import HotDeals from "./pages/HotDeals";
 import Promotions from "./pages/Promotions";
 import Shop from "./pages/Shop";
 import Wishlist from "./pages/Wishlist";
-import Login from "./pages/admin/Login";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import ForgotPassword from "./pages/ForgotPassword";
+import Account from "./pages/Account";
+import UserOrders from "./pages/Orders";
+import AdminLogin from "./pages/admin/Login";
 import Dashboard from "./pages/admin/Dashboard";
 import Products from "./pages/admin/Products";
 import CreateProduct from "./pages/admin/CreateProduct";
@@ -43,9 +48,14 @@ function App() {
       <Route path="/promotions" element={<Layout><Promotions /></Layout>} />
       <Route path="/shop" element={<Layout><Shop /></Layout>} />
       <Route path="/wishlist" element={<Layout><Wishlist /></Layout>} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/account" element={<Layout><Account /></Layout>} />
+      <Route path="/orders" element={<Layout><UserOrders /></Layout>} />
       
       {/* Admin Routes */}
-      <Route path="/admin/login" element={<Login />} />
+      <Route path="/admin/login" element={<AdminLogin />} />
       <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
       <Route
         path="/admin/dashboard"

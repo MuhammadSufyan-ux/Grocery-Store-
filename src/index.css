@@ -73,3 +73,13 @@
     touch-action: manipulation;
 }
 
+/* Extra small screen utilities */
+@media (max-width: 475px) {
+    .xs\:inline {
+        display: inline;
+    }
+    .xs\:hidden {
+        display: none;
+    }
+}
+

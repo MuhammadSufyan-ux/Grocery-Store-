@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef } from "react";
+import { useAuth } from "./AuthContext";
 
 const CartContext = createContext();
 
@@ -9,6 +10,8 @@ export const useCart = () => {
     }
     return context;
 };
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 // Load cart from localStorage
 const loadCartFromStorage = () => {
@@ -31,54 +34,266 @@ const saveCartToStorage = (cartItems) => {
 };
 
 export const CartProvider = ({ children }) => {
-    const [cartItems, setCartItems] = useState(loadCartFromStorage);
+    const { user, token, isAuthenticated } = useAuth();
+    const [cartItems, setCartItems] = useState([]);
     const [isCartOpen, setIsCartOpen] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const isSyncingRef = useRef(false);
 
-    // Save to localStorage whenever cartItems change
-    useEffect(() => {
-        saveCartToStorage(cartItems);
-    }, [cartItems]);
+    // Fetch cart from backend when user is authenticated
+    const fetchCartFromBackend = async () => {
+        if (!token || !isAuthenticated()) return;
 
-    const addToCart = (product) => {
-        setCartItems((prevItems) => {
-            const existingItem = prevItems.find((item) => item.id === product.id && item.weight === product.weight);
-            
-            if (existingItem) {
-                return prevItems.map((item) =>
-                    item.id === product.id && item.weight === product.weight
-                        ? { ...item, quantity: item.quantity + (product.quantity || 1) }
-                        : item
-                );
+        try {
+            setLoading(true);
+            const response = await fetch(`${API_URL}/api/cart`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                },
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success) {
+                    setCartItems(data.cart || []);
+                    // Clear localStorage when using backend
+                    localStorage.removeItem("groceryCart");
+                }
             }
-            
-            return [...prevItems, { ...product, quantity: product.quantity || 1 }];
-        });
-        setIsCartOpen(true);
+        } catch (error) {
+            console.error("Error fetching cart from backend:", error);
+        } finally {
+            setLoading(false);
+        }
     };
 
-    const removeFromCart = (itemId, weight) => {
-        setCartItems((prevItems) =>
-            prevItems.filter((item) => !(item.id === itemId && item.weight === weight))
-        );
+    // Sync localStorage cart to backend on login
+    const syncLocalStorageToBackend = async () => {
+        if (!token || !isAuthenticated() || isSyncingRef.current) return;
+
+        const localCart = loadCartFromStorage();
+        if (localCart.length === 0) {
+            fetchCartFromBackend();
+            return;
+        }
+
+        try {
+            isSyncingRef.current = true;
+            // Helper function to check if string is a valid MongoDB ObjectId
+            const isValidObjectId = (id) => {
+                return id && typeof id === "string" && /^[0-9a-fA-F]{24}$/.test(id);
+            };
+
+            // Add each item from localStorage to backend (only if it has a valid ObjectId)
+            for (const item of localCart) {
+                const productId = item.id || item._id;
+                
+                // Skip items with invalid ObjectIds (likely hardcoded/test data)
+                if (!isValidObjectId(productId)) {
+                    console.warn(`Skipping cart item with invalid product ID: ${productId}`);
+                    continue;
+                }
+
+                const price = typeof item.price === "string" 
+                    ? parseFloat(item.price.replace("£", "").replace(",", ""))
+                    : item.price;
+
+                try {
+                    await fetch(`${API_URL}/api/cart`, {
+                        method: "POST",
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                            productId: productId,
+                            quantity: item.quantity || 1,
+                            weight: item.weight || null,
+                            price: price,
+                        }),
+                    });
+                } catch (error) {
+                    console.error(`Error syncing cart item ${productId}:`, error);
+                    // Continue with next item even if one fails
+                }
+            }
+
+            // Clear localStorage and fetch updated cart from backend
+            localStorage.removeItem("groceryCart");
+            await fetchCartFromBackend();
+        } catch (error) {
+            console.error("Error syncing cart to backend:", error);
+        } finally {
+            isSyncingRef.current = false;
+        }
     };
 
-    const updateQuantity = (itemId, weight, newQuantity) => {
+    // Load cart when component mounts or user/auth changes
+    useEffect(() => {
+        if (isAuthenticated() && token) {
+            syncLocalStorageToBackend();
+        } else {
+            // Use localStorage for guests
+            setCartItems(loadCartFromStorage());
+            setLoading(false);
+        }
+    }, [user, token, isAuthenticated]);
+
+    // Save to localStorage only if user is not authenticated
+    useEffect(() => {
+        if (!isAuthenticated()) {
+            saveCartToStorage(cartItems);
+        }
+    }, [cartItems, isAuthenticated]);
+
+    const addToCart = async (product) => {
+        const productId = product.id || product._id;
+        const quantity = product.quantity || 1;
+        const weight = product.weight || null;
+        const price = typeof product.price === "string" 
+            ? parseFloat(product.price.replace("£", "").replace(",", ""))
+            : product.price;
+
+        if (isAuthenticated() && token) {
+            // Use backend API
+            try {
+                const response = await fetch(`${API_URL}/api/cart`, {
+                    method: "POST",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        productId,
+                        quantity,
+                        weight,
+                        price,
+                    }),
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success) {
+                        setCartItems(data.cart || []);
+                        setIsCartOpen(true);
+                    }
+                }
+            } catch (error) {
+                console.error("Error adding to cart:", error);
+            }
+        } else {
+            // Use localStorage
+            setCartItems((prevItems) => {
+                const existingItem = prevItems.find((item) => item.id === productId && item.weight === weight);
+                
+                if (existingItem) {
+                    return prevItems.map((item) =>
+                        item.id === productId && item.weight === weight
+                            ? { ...item, quantity: item.quantity + quantity }
+                            : item
+                    );
+                }
+                
+                return [...prevItems, { ...product, id: productId, quantity, weight }];
+            });
+            setIsCartOpen(true);
+        }
+    };
+
+    const removeFromCart = async (itemId, weight) => {
+        if (isAuthenticated() && token) {
+            // Use backend API
+            try {
+                const response = await fetch(`${API_URL}/api/cart/${itemId}?weight=${weight || ""}`, {
+                    method: "DELETE",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        "Content-Type": "application/json",
+                    },
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success) {
+                        setCartItems(data.cart || []);
+                    }
+                }
+            } catch (error) {
+                console.error("Error removing from cart:", error);
+            }
+        } else {
+            // Use localStorage
+            setCartItems((prevItems) =>
+                prevItems.filter((item) => !(item.id === itemId && item.weight === weight))
+            );
+        }
+    };
+
+    const updateQuantity = async (itemId, weight, newQuantity) => {
         if (newQuantity <= 0) {
             removeFromCart(itemId, weight);
             return;
         }
-        
-        setCartItems((prevItems) =>
-            prevItems.map((item) =>
-                item.id === itemId && item.weight === weight
-                    ? { ...item, quantity: newQuantity }
-                    : item
-            )
-        );
+
+        if (isAuthenticated() && token) {
+            // Use backend API
+            try {
+                const response = await fetch(`${API_URL}/api/cart/${itemId}`, {
+                    method: "PUT",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        quantity: newQuantity,
+                        weight,
+                    }),
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success) {
+                        setCartItems(data.cart || []);
+                    }
+                }
+            } catch (error) {
+                console.error("Error updating cart quantity:", error);
+            }
+        } else {
+            // Use localStorage
+            setCartItems((prevItems) =>
+                prevItems.map((item) =>
+                    item.id === itemId && item.weight === weight
+                        ? { ...item, quantity: newQuantity }
+                        : item
+                )
+            );
+        }
     };
 
-    const clearCart = () => {
-        setCartItems([]);
+    const clearCart = async () => {
+        if (isAuthenticated() && token) {
+            // Use backend API
+            try {
+                const response = await fetch(`${API_URL}/api/cart`, {
+                    method: "DELETE",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        "Content-Type": "application/json",
+                    },
+                });
+
+                if (response.ok) {
+                    setCartItems([]);
+                }
+            } catch (error) {
+                console.error("Error clearing cart:", error);
+            }
+        } else {
+            // Use localStorage
+            setCartItems([]);
+        }
     };
 
     const getTotalPrice = () => {
@@ -104,6 +319,8 @@ export const CartProvider = ({ children }) => {
                 getTotalItems,
                 isCartOpen,
                 setIsCartOpen,
+                loading,
+                fetchCartFromBackend,
             }}
         >
             {children}

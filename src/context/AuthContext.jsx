@@ -23,11 +23,16 @@ export const AuthProvider = ({ children }) => {
         localStorage.removeItem("token");
     };
 
-    const fetchUser = async () => {
+    const fetchUser = async (authToken = token) => {
+        if (!authToken) {
+            setLoading(false);
+            return;
+        }
+        
         try {
             const response = await fetch(`${API_URL}/api/auth/me`, {
                 headers: {
-                    Authorization: `Bearer ${token}`,
+                    Authorization: `Bearer ${authToken}`,
                 },
             });
 
@@ -46,14 +51,15 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    // Check if user is authenticated on mount
+    // Check if user is authenticated on mount and when token changes
     useEffect(() => {
         if (token) {
-            fetchUser();
+            fetchUser(token);
         } else {
             setLoading(false);
+            setUser(null);
         }
-    }, []); // Only run on mount
+    }, [token]); // Run when token changes
 
     const login = async (email, password) => {
         try {
@@ -68,9 +74,11 @@ export const AuthProvider = ({ children }) => {
             const data = await response.json();
 
             if (response.ok && data.success) {
-                setToken(data.token);
-                setUser(data.user);
-                localStorage.setItem("token", data.token);
+                const newToken = data.token;
+                setToken(newToken);
+                localStorage.setItem("token", newToken);
+                // Fetch user with new token
+                await fetchUser(newToken);
                 return { success: true, message: "Login successful", user: data.user };
             } else {
                 return { success: false, message: data.message || "Login failed" };
@@ -85,6 +93,106 @@ export const AuthProvider = ({ children }) => {
         return !!token && !!user;
     };
 
+    const register = async (userData) => {
+        try {
+            const response = await fetch(`${API_URL}/api/auth/register`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(userData),
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                const newToken = data.token;
+                setToken(newToken);
+                localStorage.setItem("token", newToken);
+                // Fetch user with new token
+                await fetchUser(newToken);
+                return { success: true, message: "Registration successful", user: data.user };
+            } else {
+                return { success: false, message: data.message || "Registration failed" };
+            }
+        } catch (error) {
+            console.error("Registration error:", error);
+            return { success: false, message: "Network error. Please try again." };
+        }
+    };
+
+    const forgotPassword = async (email) => {
+        try {
+            const response = await fetch(`${API_URL}/api/auth/forgot-password`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ email }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                return { success: true, message: data.message || "Password reset email sent" };
+            } else {
+                return { success: false, message: data.message || "Failed to send reset email" };
+            }
+        } catch (error) {
+            console.error("Forgot password error:", error);
+            return { success: false, message: "Network error. Please try again." };
+        }
+    };
+
+    const resetPassword = async (token, password) => {
+        try {
+            const response = await fetch(`${API_URL}/api/auth/reset-password`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ token, password }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                return { success: true, message: data.message || "Password reset successful" };
+            } else {
+                return { success: false, message: data.message || "Password reset failed" };
+            }
+        } catch (error) {
+            console.error("Reset password error:", error);
+            return { success: false, message: "Network error. Please try again." };
+        }
+    };
+
+    const updateProfile = async (profileData) => {
+        try {
+            const response = await fetch(`${API_URL}/api/auth/profile`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify(profileData),
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                // Update user state with new data
+                setUser(data.user);
+                return { success: true, message: "Profile updated successfully", user: data.user };
+            } else {
+                return { success: false, message: data.message || "Failed to update profile" };
+            }
+        } catch (error) {
+            console.error("Update profile error:", error);
+            return { success: false, message: "Network error. Please try again." };
+        }
+    };
+
     const isAdmin = () => {
         return user && user.role === "admin";
     };
@@ -96,9 +204,14 @@ export const AuthProvider = ({ children }) => {
                 token,
                 loading,
                 login,
+                register,
                 logout,
+                forgotPassword,
+                resetPassword,
+                updateProfile,
                 isAuthenticated,
                 isAdmin,
+                fetchUser,
             }}
         >
             {children}

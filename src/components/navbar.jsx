@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import logo from "../assets/images/Logo.png";
-import profile from "../assets/images/user_profile.png";
 import {
     Search,
     Heart,
@@ -18,12 +17,57 @@ import {
 } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { useWishlist } from "../context/WishlistContext";
+import { useAuth } from "../context/AuthContext";
+
+// Function to get user initials for placeholder
+const getUserInitials = (firstName, lastName, name, email) => {
+    if (firstName && lastName) {
+        return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+    }
+    if (name) {
+        const parts = name.trim().split(" ");
+        if (parts.length >= 2) {
+            return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase();
+        }
+        return name.charAt(0).toUpperCase();
+    }
+    if (email) {
+        return email.charAt(0).toUpperCase();
+    }
+    return "U";
+};
+
+// Generate placeholder image as SVG data URL
+const getPlaceholderImage = (initials) => {
+    const svg = `
+        <svg width="128" height="128" xmlns="http://www.w3.org/2000/svg">
+            <rect width="128" height="128" fill="#3B745B"/>
+            <text x="50%" y="50%" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="central">${initials}</text>
+        </svg>
+    `;
+    return `data:image/svg+xml;base64,${btoa(svg)}`;
+};
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 const Navbar = () => {
     const { getTotalItems, getTotalPrice } = useCart();
     const { getTotalItems: getWishlistTotalItems } = useWishlist();
+    const { user, isAuthenticated, logout, isAdmin } = useAuth();
+
+    // Get profile image or placeholder
+    const getProfileImage = () => {
+        if (user?.profileImage) {
+            return user.profileImage;
+        }
+        const initials = getUserInitials(
+            user?.firstName,
+            user?.lastName,
+            user?.name,
+            user?.email
+        );
+        return getPlaceholderImage(initials);
+    };
     // --- State ---
     const [isCategoryOpen, setCategoryOpen] = useState(false);
     const [isMobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -376,20 +420,92 @@ const Navbar = () => {
                                 </div>
                             </Link>
 
-                            {/* User Profile */}
-                            <div className="hidden cursor-pointer items-center gap-2 sm:gap-3 md:flex">
-                                <img
-                                    src={profile}
-                                    alt="Ramzi"
-                                    className="h-8 w-8 sm:h-10 sm:w-10 md:h-11 md:w-11 rounded-full object-cover border-2 border-gray-100"
-                                />
-                                <div className="hidden xl:flex items-center gap-1">
-                                    <span className="text-sm sm:text-base font-bold text-[#253D4E]">
-                                        Ramzi Cherif
-                                    </span>
-                                    <ChevronDown className="h-4 w-4 text-[#ADADAD]" />
+                            {/* User Profile / Login */}
+                            {isAuthenticated() ? (
+                                <div className="hidden cursor-pointer items-center gap-2 sm:gap-3 md:flex relative group">
+                                    <img
+                                        src={getProfileImage()}
+                                        alt={user?.firstName || user?.name || "User"}
+                                        className="h-8 w-8 sm:h-10 sm:w-10 md:h-11 md:w-11 rounded-full object-cover border-2 border-gray-100"
+                                    />
+                                    <div className="hidden xl:flex items-center gap-1">
+                                        <span className="text-sm sm:text-base font-bold text-[#253D4E]">
+                                            {user?.firstName && user?.lastName 
+                                                ? `${user.firstName} ${user.lastName}` 
+                                                : user?.name || user?.email || "Account"}
+                                        </span>
+                                        <ChevronDown className="h-4 w-4 text-[#ADADAD]" />
+                                    </div>
+                                    {/* Dropdown Menu */}
+                                    <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                                        <div className="py-2">
+                                            <Link
+                                                to="/account"
+                                                className="block px-4 py-2 text-sm text-[#253D4E] hover:bg-gray-50"
+                                            >
+                                                My Account
+                                            </Link>
+                                            <Link
+                                                to="/orders"
+                                                className="block px-4 py-2 text-sm text-[#253D4E] hover:bg-gray-50"
+                                            >
+                                                My Orders
+                                            </Link>
+                                            {isAdmin() && (
+                                                <>
+                                                    <div className="border-t border-gray-200 my-1"></div>
+                                                    <Link
+                                                        to="/admin/dashboard"
+                                                        className="block px-4 py-2 text-sm text-[#3B745B] font-semibold hover:bg-gray-50"
+                                                    >
+                                                        Admin Dashboard
+                                                    </Link>
+                                                    <Link
+                                                        to="/admin/products"
+                                                        className="block px-4 py-2 text-sm text-[#253D4E] hover:bg-gray-50"
+                                                    >
+                                                        Manage Products
+                                                    </Link>
+                                                    <Link
+                                                        to="/admin/orders"
+                                                        className="block px-4 py-2 text-sm text-[#253D4E] hover:bg-gray-50"
+                                                    >
+                                                        Manage Orders
+                                                    </Link>
+                                                    <Link
+                                                        to="/admin/categories"
+                                                        className="block px-4 py-2 text-sm text-[#253D4E] hover:bg-gray-50"
+                                                    >
+                                                        Manage Categories
+                                                    </Link>
+                                                    <div className="border-t border-gray-200 my-1"></div>
+                                                </>
+                                            )}
+                                            <button
+                                                onClick={logout}
+                                                className="w-full text-left px-4 py-2 text-sm text-[#253D4E] hover:bg-gray-50"
+                                            >
+                                                Logout
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
+                            ) : (
+                                <div className="hidden md:flex items-center gap-3 sm:gap-4">
+                                    <Link
+                                        to="/login"
+                                        className="text-sm sm:text-base font-semibold text-[#253D4E] hover:text-[#3B745B] transition-colors"
+                                    >
+                                        Login
+                                    </Link>
+                                    <Link
+                                        to="/register"
+                                        className="px-4 py-2 text-sm sm:text-base font-semibold text-white bg-[#3B745B] rounded-lg hover:bg-[#2a5542] transition-colors"
+                                    >
+                                        Register
+                                    </Link>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -476,6 +592,67 @@ const Navbar = () => {
                         <Link to="/wishlist" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 hover:text-[#3B745B] transition-colors">
                             <Heart className="h-5 w-5" /> Wishlist
                         </Link>
+
+                        <div className="h-px bg-gray-100 my-2"></div>
+
+                        {isAuthenticated() ? (
+                            <>
+                                <div className="flex items-center gap-3">
+                                    <img
+                                        src={getProfileImage()}
+                                        alt={user?.firstName || user?.name || "User"}
+                                        className="h-8 w-8 rounded-full object-cover border-2 border-gray-100"
+                                    />
+                                    <span className="font-semibold">
+                                        {user?.firstName && user?.lastName 
+                                            ? `${user.firstName} ${user.lastName}` 
+                                            : user?.name || user?.email || "Account"}
+                                    </span>
+                                </div>
+                                <Link to="/account" onClick={() => setMobileMenuOpen(false)} className="hover:text-[#3B745B] transition-colors">
+                                    My Account
+                                </Link>
+                                <Link to="/orders" onClick={() => setMobileMenuOpen(false)} className="hover:text-[#3B745B] transition-colors">
+                                    My Orders
+                                </Link>
+                                {isAdmin() && (
+                                    <>
+                                        <div className="h-px bg-gray-100 my-2"></div>
+                                        <Link to="/admin/dashboard" onClick={() => setMobileMenuOpen(false)} className="hover:text-[#3B745B] transition-colors font-semibold text-[#3B745B]">
+                                            Admin Dashboard
+                                        </Link>
+                                        <Link to="/admin/products" onClick={() => setMobileMenuOpen(false)} className="hover:text-[#3B745B] transition-colors">
+                                            Manage Products
+                                        </Link>
+                                        <Link to="/admin/orders" onClick={() => setMobileMenuOpen(false)} className="hover:text-[#3B745B] transition-colors">
+                                            Manage Orders
+                                        </Link>
+                                        <Link to="/admin/categories" onClick={() => setMobileMenuOpen(false)} className="hover:text-[#3B745B] transition-colors">
+                                            Manage Categories
+                                        </Link>
+                                        <div className="h-px bg-gray-100 my-2"></div>
+                                    </>
+                                )}
+                                <button
+                                    onClick={() => {
+                                        logout();
+                                        setMobileMenuOpen(false);
+                                    }}
+                                    className="text-left hover:text-[#3B745B] transition-colors"
+                                >
+                                    Logout
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="hover:text-[#3B745B] transition-colors">
+                                    Login
+                                </Link>
+                                <Link to="/register" onClick={() => setMobileMenuOpen(false)} className="px-4 py-2 text-white bg-[#3B745B] rounded-lg hover:bg-[#2a5542] transition-colors text-center">
+                                    Register
+                                </Link>
+                            </>
+                        )}
                     </nav>
                 </div>
             </div>

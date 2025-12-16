@@ -8,6 +8,14 @@ const userSchema = new mongoose.Schema(
             required: [true, "Please provide a name"],
             trim: true,
         },
+        firstName: {
+            type: String,
+            trim: true,
+        },
+        lastName: {
+            type: String,
+            trim: true,
+        },
         email: {
             type: String,
             required: [true, "Please provide an email"],
@@ -24,6 +32,28 @@ const userSchema = new mongoose.Schema(
             required: [true, "Please provide a password"],
             minlength: [6, "Password must be at least 6 characters"],
             select: false, // Don't return password by default
+        },
+        profileImage: {
+            type: String,
+            default: null,
+        },
+        billingAddress: {
+            streetAddress: { type: String, trim: true },
+            apartment: { type: String, trim: true },
+            townCity: { type: String, trim: true },
+            state: { type: String, trim: true },
+            zipCode: { type: String, trim: true },
+            country: { type: String, trim: true },
+            phoneNumber: { type: String, trim: true },
+        },
+        shippingAddress: {
+            streetAddress: { type: String, trim: true },
+            apartment: { type: String, trim: true },
+            townCity: { type: String, trim: true },
+            state: { type: String, trim: true },
+            zipCode: { type: String, trim: true },
+            country: { type: String, trim: true },
+            phoneNumber: { type: String, trim: true },
         },
         role: {
             type: String,
