@@ -13,10 +13,13 @@ import {
     Percent,
     Megaphone,
     History,
-    Bell
+    Bell,
+    ChevronRight
 } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { useWishlist } from "../context/WishlistContext";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 const Navbar = () => {
     const { getTotalItems, getTotalPrice } = useCart();
@@ -25,19 +28,52 @@ const Navbar = () => {
     const [isCategoryOpen, setCategoryOpen] = useState(false);
     const [isMobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [isSearchModalOpen, setSearchModalOpen] = useState(false);
+    const [categories, setCategories] = useState([]);
+    const [hoveredCategory, setHoveredCategory] = useState(null);
     const searchInputRef = useRef(null);
     const categoryDropdownRef = useRef(null);
-
-    // --- Data ---
-    const categories = [
-        "Organic",
-        "Juice",
-        "Vegetables",
-        "Cookies",
-        "Pretzels",
-    ];
+    const megaMenuRef = useRef(null);
 
     const topSearches = ["Fresh Fruits", "Bakery", "Vegetables", "Milk", "Snacks"];
+
+    // --- Fetch Categories ---
+    useEffect(() => {
+        fetchCategories();
+    }, []);
+
+    const fetchCategories = async () => {
+        try {
+            const response = await fetch(`${API_URL}/api/categories?includeSubCategories=true`, {
+                method: "GET",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                // Group categories: main categories with their sub-categories
+                const mainCategories = data.categories.filter((cat) => !cat.parentCategory);
+                const subCategories = data.categories.filter((cat) => cat.parentCategory);
+
+                // Group sub-categories by parent
+                const groupedCategories = mainCategories.map((main) => {
+                    const subs = subCategories.filter(
+                        (sub) => (sub.parentCategory._id || sub.parentCategory).toString() === main._id.toString()
+                    );
+                    return {
+                        ...main,
+                        subCategories: subs.sort((a, b) => (a.order || 0) - (b.order || 0)),
+                    };
+                });
+
+                setCategories(groupedCategories.sort((a, b) => (a.order || 0) - (b.order || 0)));
+            }
+        } catch (err) {
+            console.error("Error fetching categories:", err);
+        }
+    };
 
     // --- Handlers ---
 
@@ -53,11 +89,23 @@ const Navbar = () => {
         return () => window.removeEventListener("resize", handleResize);
     }, []);
 
+    // Set first category as hovered when menu opens
+    useEffect(() => {
+        if (isCategoryOpen && categories.length > 0 && !hoveredCategory) {
+            setHoveredCategory(categories[0]._id);
+        }
+    }, [isCategoryOpen, categories]);
+
     // Close category dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = (event) => {
-            if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target)) {
+            if (
+                categoryDropdownRef.current &&
+                !categoryDropdownRef.current.contains(event.target) &&
+                (!megaMenuRef.current || !megaMenuRef.current.contains(event.target))
+            ) {
                 setCategoryOpen(false);
+                setHoveredCategory(null);
             }
         };
 
@@ -102,36 +150,166 @@ const Navbar = () => {
                         </div>
 
                         {/* 2. MIDDLE: Search Bar (Desktop) */}
-                        <div className="hidden max-w-2xl flex-1 px-8 lg:flex">
+                        <div className="hidden max-w-2xl flex-1 px-8 lg:flex relative" style={{ zIndex: 1 }}>
                             <div className="flex w-full items-center rounded bg-[#f3f4f6] border border-transparent focus-within:border-[#3B745B] focus-within:ring-1 focus-within:ring-[#3B745B] transition-all duration-200 relative overflow-visible">
 
-                                {/* Category Dropdown */}
-                                <div ref={categoryDropdownRef} className="relative border-r border-gray-300 z-50">
+                                {/* Category Mega Menu */}
+                                <div
+                                    ref={categoryDropdownRef}
+                                    className="relative border-r border-gray-300"
+                                    style={{ overflow: 'visible', zIndex: 50 }}
+                                >
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             setCategoryOpen(!isCategoryOpen);
                                         }}
+                                        onMouseEnter={() => setCategoryOpen(true)}
                                         className="flex w-40 items-center justify-between px-4 py-3.5 text-sm font-semibold text-[#253D4E] hover:text-[#3B745B]"
                                     >
                                         All Categories
                                         <ChevronDown className={`h-4 w-4 text-[#ADADAD] transition-transform duration-200 ${isCategoryOpen ? "rotate-180" : ""}`} />
                                     </button>
 
-                                    {/* Dropdown List */}
-                                    {isCategoryOpen && (
-                                        <div className="absolute top-full left-0 z-[60] w-full bg-white shadow-xl border border-gray-100 rounded-b-md mt-1">
-                                            <ul className="py-2 text-sm text-[#253D4E]">
-                                                {categories.map((cat, index) => (
-                                                    <li
-                                                        key={index}
-                                                        onClick={() => setCategoryOpen(false)}
-                                                        className="px-4 py-2 hover:bg-[#DEF9EC] hover:text-[#3B745B] cursor-pointer transition-colors"
-                                                    >
-                                                        {cat}
-                                                    </li>
-                                                ))}
-                                            </ul>
+                                    {/* Mega Menu */}
+                                    {isCategoryOpen && categories.length > 0 && (
+                                        <div
+                                            ref={megaMenuRef}
+                                            className="absolute top-full left-0 w-[700px] max-w-[calc(100vw-2rem)] bg-white shadow-2xl border border-gray-200 rounded-lg mt-1 overflow-hidden transition-all duration-200 ease-out"
+                                            style={{ zIndex: 1000 }}
+                                            onMouseEnter={() => setCategoryOpen(true)}
+                                            onMouseLeave={() => {
+                                                setCategoryOpen(false);
+                                                setHoveredCategory(null);
+                                            }}
+                                        >
+                                            {/* Background Image with Low Opacity */}
+                                            {hoveredCategory && (() => {
+                                                const hoveredCat = categories.find(cat => cat._id === hoveredCategory);
+                                                return hoveredCat?.image ? (
+                                                    <div 
+                                                        className="absolute inset-0 opacity-5 bg-cover bg-center bg-no-repeat transition-opacity duration-300 pointer-events-none"
+                                                        style={{
+                                                            backgroundImage: `url(${hoveredCat.image})`
+                                                        }}
+                                                    />
+                                                ) : null;
+                                            })()}
+                                            
+                                            {/* Content Container */}
+                                            <div className="relative grid grid-cols-[200px_1fr] min-h-[300px]">
+                                                {/* First Column: Main Categories */}
+                                                <div className="bg-gray-50 border-r border-gray-200 py-2 overflow-y-auto max-h-[400px]">
+                                                    <ul className="space-y-0">
+                                                        {categories.map((category) => {
+                                                            const isHovered = hoveredCategory === category._id;
+                                                            return (
+                                                                <li key={category._id}>
+                                                                    <Link
+                                                                        to={`/shop?category=${category.name}`}
+                                                                        onMouseEnter={() => setHoveredCategory(category._id)}
+                                                                        onClick={() => {
+                                                                            setCategoryOpen(false);
+                                                                            setHoveredCategory(null);
+                                                                        }}
+                                                                        className={`flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium transition-all duration-200 ${
+                                                                            isHovered 
+                                                                ? 'bg-white text-[#3B745B] border-r-2 border-[#3B745B]' 
+                                                                : 'text-[#253D4E] hover:bg-white/50 hover:text-[#3B745B]'
+                                                                        }`}
+                                                                    >
+                                                                        {/* Category Image */}
+                                                                        {category.image && (
+                                                                            <img
+                                                                                src={category.image}
+                                                                                alt={category.name}
+                                                                                className="w-5 h-5 rounded object-cover flex-shrink-0"
+                                                                                onError={(e) => {
+                                                                                    e.target.style.display = "none";
+                                                                                }}
+                                                                            />
+                                                                        )}
+                                                                        <span className="truncate">{category.name}</span>
+                                                                    </Link>
+                                                                </li>
+                                                            );
+                                                        })}
+                                                    </ul>
+                                                </div>
+
+                                                {/* Second Column: Sub-Categories */}
+                                                <div className="py-2 px-3 overflow-y-auto max-h-[400px]">
+                                                    {hoveredCategory ? (() => {
+                                                        const hoveredCat = categories.find(cat => cat._id === hoveredCategory);
+                                                        if (!hoveredCat) return null;
+                                                        
+                                                        return (
+                                                            <div>
+                                                                {/* Main Category Header */}
+                                                                <div className="mb-2 pb-2 border-b border-gray-200">
+                                                                    <div className="flex items-center gap-2">
+                                                                        {hoveredCat.image && (
+                                                                            <img
+                                                                                src={hoveredCat.image}
+                                                                                alt={hoveredCat.name}
+                                                                                className="w-6 h-6 rounded object-cover flex-shrink-0"
+                                                                                onError={(e) => {
+                                                                                    e.target.style.display = "none";
+                                                                                }}
+                                                                            />
+                                                                        )}
+                                                                        <h3 className="text-sm font-semibold text-[#253D4E] truncate">
+                                                                            {hoveredCat.name}
+                                                                        </h3>
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Sub-Categories List */}
+                                                                {hoveredCat.subCategories && hoveredCat.subCategories.length > 0 ? (
+                                                                    <ul className="space-y-1">
+                                                                        {hoveredCat.subCategories.map((sub) => (
+                                                                            <li key={sub._id}>
+                                                                                <Link
+                                                                                    to={`/shop?category=${sub.name}`}
+                                                                                    onClick={() => {
+                                                                                        setCategoryOpen(false);
+                                                                                        setHoveredCategory(null);
+                                                                                    }}
+                                                                                    className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#DEF9EC] hover:text-[#3B745B] transition-all duration-200 group"
+                                                                                >
+                                                                                    {/* Sub-Category Image */}
+                                                                                    {sub.image && (
+                                                                                        <img
+                                                                                            src={sub.image}
+                                                                                            alt={sub.name}
+                                                                                            className="w-5 h-5 rounded object-cover flex-shrink-0"
+                                                                                            onError={(e) => {
+                                                                                                e.target.style.display = "none";
+                                                                                            }}
+                                                                                        />
+                                                                                    )}
+                                                                                    <span className="text-xs text-gray-700 group-hover:text-[#3B745B] flex-1 truncate">
+                                                                                        {sub.name}
+                                                                                    </span>
+                                                                                    <ChevronRight className="h-3 w-3 text-gray-400 group-hover:text-[#3B745B] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                                                                                </Link>
+                                                                            </li>
+                                                                        ))}
+                                                                    </ul>
+                                                                ) : (
+                                                                    <div className="text-center py-4 text-gray-500">
+                                                                        <p className="text-xs">No sub-categories available</p>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })() : (
+                                                        <div className="flex items-center justify-center h-full text-gray-400 px-4">
+                                                            <p className="text-xs text-center">Hover over a category to view sub-categories</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
                                     )}
                                 </div>

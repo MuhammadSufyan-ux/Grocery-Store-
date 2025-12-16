@@ -15,3 +15,61 @@
 }
 
 @import "tailwindcss";
+
+/* Toast Animations */
+@keyframes slide-in-right {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.animate-slide-in-right {
+    animation: slide-in-right 0.3s ease-out;
+}
+
+/* Hide scrollbar for horizontal scroll */
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+
+/* Custom scrollbar for thumbnail gallery */
+.scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 10px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* For Firefox */
+.scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 #f1f1f1;
+}
+
+/* Touch manipulation for better mobile performance */
+.touch-manipulation {
+    touch-action: manipulation;
+}
+
